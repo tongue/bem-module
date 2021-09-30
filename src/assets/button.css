@@ -1,0 +1,27 @@
+.button {
+  cursor: pointer;
+}
+
+.button:hover {
+  cursor: crosshair;
+}
+
+.button--state-pending {
+  cursor: progress;
+}
+
+.button--state-error {
+  cursor: help;
+}
+
+.button__icon {
+  display: inline-block;
+}
+
+.button__icon--state-pending {
+  display: block;
+}
+
+.button__icon--state-pending {
+  display: none;
+}
