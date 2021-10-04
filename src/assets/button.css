@@ -14,6 +14,10 @@
   cursor: help;
 }
 
+.button--active {
+  cursor: grab;
+}
+
 .button__icon {
   display: inline-block;
 }
@@ -22,6 +26,39 @@
   display: block;
 }
 
-.button__icon--state-pending {
+.button__icon--state-error {
   display: none;
+}
+
+.button__special {
+  color: red;
+}
+
+.button__special--active {
+  color: hotpink;
+}
+
+.button__special--state-pending {
+  color: orange;
+}
+
+.button__special--state-ok {
+  color: green;
+}
+
+.button__special--state-error {
+  color: purple;
+}
+
+.shouldnotbehere {
+  display: table;
+}
+
+@media (min-width: 32em) {
+  .button {
+    cursor: unset;
+  }
+  .button__icon {
+    display: inline-flex;
+  }
 }

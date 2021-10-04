@@ -1,167 +1,165 @@
-import { readFileSync } from "fs";
-import { resolve } from "path";
-import { parse, findAll, CssNode } from "css-tree";
-import { isUndefined, isString, isArray } from "lodash";
+import { parse, findAll, CssNode, ClassSelector } from "css-tree";
+import {
+  extractBlockName,
+  extractElementName,
+  extractModifierName,
+  extractModifierValue,
+  hasElement,
+  hasModifier,
+  hasModifierValue,
+} from "./utils/bem";
+import { notEmpty } from "./utils/typeguards";
+import { isTypeClassSelector } from "./utils/css-tree";
+import { addUniqueToArray } from "./utils/array";
 
-type BemModifier = Record<string, string[]>;
-type BemElement = [string, BemModifier | undefined];
+type CssSelector = string;
+type BemModifierName = string;
+type BemModifierValue = string;
+type BemElementName = string;
+type BemModifier = Record<BemModifierName, BemModifierValue[] | boolean>;
+type BemElement = [BemElementName, BemModifier];
 type Bem = [BemElement, BemElement[] | undefined];
 
-const seperator = {
-  element: "__",
-  modifier: "--",
-  modifierValue: "-",
-};
-
-/** Checks if value is not `null` or `undefined`
- * @param value the value you wan't to check
- * @returns `true` if value is not `null` or `undefined`
- */
-const notEmpty = <TValue>(value: TValue | null | undefined): value is TValue =>
-  value !== null && value !== undefined;
+const EMPTY_BEM_ELEMENT: BemElement = [undefined, undefined];
 
 /**
- * Gets the list of class selectors from AST
- * @param ast CSS Ast Object
- * @returns an array of class selectors as strings
+ * Creates a bem modifier object with the value added from selector
+ * @param selector modifier selector
+ * @param existingModifierValues already existing modifier values
+ * @returns BemModifier object
  */
-const classSelectorsFromAst = (ast: CssNode): string[] =>
-  findAll(ast, (node) => node.type === "ClassSelector")
-    .map((selector) =>
-      selector.type === "ClassSelector" ? selector.name : undefined
+export const addModifier = (
+  selector: CssSelector,
+  existingModifierValues: BemModifierValue[] = []
+): BemModifier => {
+  if (hasModifierValue(selector)) {
+    return {
+      [extractModifierName(selector)]: addUniqueToArray(
+        existingModifierValues,
+        extractModifierValue(selector)
+      ),
+    };
+  }
+
+  return hasModifier(selector) &&
+    notEmpty(selector) &&
+    extractModifierName(selector) !== ""
+    ? {
+        [extractModifierName(selector)]: true,
+      }
+    : {};
+};
+
+/**
+ * Converts selectors to a BemElement object
+ * @param bemElement a bem element name and modifier object
+ * @param currentSelector a bem css selector
+ * @returns a tuple with bem element name and modifier object
+ */
+export const classNamesToBemElement = (
+  [elementName, modifiers]: BemElement,
+  currentSelector: CssSelector
+): BemElement => {
+  if (notEmpty(elementName)) {
+    const modifierName = extractModifierName(currentSelector);
+    const modifierValue = modifiers[modifierName];
+    const existingModifierValues: BemModifierValue[] = Array.isArray(
+      modifierValue
     )
-    .filter(notEmpty);
+      ? modifierValue
+      : [];
 
-/**
- * Checks if selector is an element selector
- * @param selector bem css selector
- * @returns `true` if the selector is a element class
- */
-const hasElement = (selector: string): boolean =>
-  selector.includes(seperator.element);
-
-/**
- * Checks if selector is an modifier selector
- * @param selector bem css selector
- * @returns `true` if the selector is a modifier class
- */
-const hasModifier = (selector: string): boolean =>
-  selector.includes(seperator.modifier);
-
-/**
- * Get the block element(s) for a list of selectors
- * @param selectors array of bem css selectors
- * @returns a `string` if there's only one possible block element, an `array` if there's multiple and `undefined` if none
- */
-const getBlock = (selectors: string[]): string | string[] | undefined =>
-  selectors
-    .filter((selector) => !hasElement(selector) && !hasModifier(selector))
-    .reduce((prev, curr) => {
-      if (isUndefined(prev)) return curr;
-      if (isString(prev)) {
-        if (prev === curr) return prev;
-        return [prev, curr];
-      }
-      return [...prev, curr];
-    }, undefined);
-
-/**
- * Get a list of all element selectors
- * @param selectors array of bem css selectors
- * @returns an `array` of element selectors
- */
-const getElements = (selectors: string[]): string[] =>
-  selectors
-    .filter((selector) => hasElement(selector))
-    .map((selector) => selector.split(seperator.modifier)[0])
-    .reduce((prev, curr) => (prev.includes(curr) ? prev : [...prev, curr]), [])
-    .map((selector) => selector.split(seperator.element)[1]);
-
-const getBlockName = (selector: string): string => {
-  if (hasElement(selector)) {
-    return selector.split(seperator.element)[0];
+    return [
+      elementName,
+      {
+        ...modifiers,
+        ...addModifier(currentSelector, existingModifierValues),
+      },
+    ];
   }
-  if (hasModifier) {
-    return selector.split(seperator.modifier)[0];
-  }
-  return selector;
+
+  const extractName = hasElement(currentSelector)
+    ? extractElementName
+    : extractBlockName;
+
+  // no previous values
+  return [
+    extractName(currentSelector),
+    hasModifier(currentSelector) ? addModifier(currentSelector) : {},
+  ];
 };
-const getModifierName = (selector: string): string =>
-  selector.split(seperator.modifier)[1].split(seperator.modifierValue)[0];
-const getModifierValue = (selector: string): string =>
-  selector.split(seperator.modifier)[1].split(seperator.modifierValue)[1];
 
-function createBem(selectors: string[]): Bem {
-  return selectors.reduce(
-    ([block, elements], selector) => {
-      // it's a block level selector
-      if (!hasElement(selector)) {
-        if (hasModifier(selector)) {
-          if (isUndefined(block)) {
-            return [
-              [
-                getBlockName(selector),
-                { [getModifierName(selector)]: [getModifierValue(selector)] },
-              ],
-              elements,
-            ];
-          }
-          const [blockName, modifiers] = block;
-          if (isUndefined(modifiers)) {
-            //
-            return [
-              [
-                blockName,
-                { [getModifierName(selector)]: [getModifierValue(selector)] },
-              ],
-              elements,
-            ];
-          }
-
-          if (getModifierName(selector) in modifiers) {
-            return [
-              [
-                blockName,
-                {
-                  ...modifiers,
-                  [getModifierName(selector)]: [
-                    ...modifiers[
-                      (getModifierName(selector), getModifierValue(selector))
-                    ],
-                  ],
-                },
-              ],
-            ];
-          }
-
-          return [block, elements];
-        }
-        if (isUndefined(block)) {
-          return [[selector, undefined], elements];
-        }
-        return [block, elements];
-      }
-      return [block, elements];
-    },
-    [undefined, undefined]
+/**
+ * Gets block and element level selectors sorted in a tuple
+ * @param ast CssTree ast
+ * @returns a tuple with block level selectors and element level selectors
+ */
+export const getBlockAndElementLevelClassnames = (
+  ast: CssNode
+): [CssSelector[], CssSelector[]] =>
+  findAll(ast, isTypeClassSelector).reduce<[CssSelector[], CssSelector[]]>(
+    ([blockClasses, elementClasses], node: ClassSelector) =>
+      hasElement(node.name)
+        ? [blockClasses, addUniqueToArray(elementClasses, node.name)]
+        : [addUniqueToArray(blockClasses, node.name), elementClasses],
+    [[], []]
   );
-}
 
-function createModule(code: string): void {
+/**
+ * Groups selectors by their BEM element
+ * @param groupedElements a object with selectors sorted by element
+ * @param className a bem css selector
+ * @returns a object with selectors sorted by elements
+ */
+export const groupByElement = (
+  groupedElements: Record<BemElementName, CssSelector[]>,
+  className: CssSelector
+): Record<BemElementName, CssSelector[]> => {
+  const elementName = extractElementName(className);
+  const hasElementName = elementName in groupedElements;
+
+  return {
+    ...groupedElements,
+    [elementName]: hasElementName
+      ? [...groupedElements[elementName], className]
+      : [className],
+  };
+};
+
+/**
+ * create the object needed to create a module
+ * @param code css code
+ * @returns a Bem object
+ */
+export function createModule(code: string): Bem {
   const ast = parse(code);
-  const selectors = classSelectorsFromAst(ast);
-  const bem = createBem(selectors);
-  console.log(bem);
+  const [blockSelectors, elementSelectors] =
+    getBlockAndElementLevelClassnames(ast);
+  const block = blockSelectors.reduce<BemElement>(
+    classNamesToBemElement,
+    EMPTY_BEM_ELEMENT
+  );
+  const groupedElements = elementSelectors.reduce<Record<string, string[]>>(
+    groupByElement,
+    {}
+  );
+  const elements = Object.entries(groupedElements).map(([, classNames]) =>
+    classNames.reduce<BemElement>(classNamesToBemElement, EMPTY_BEM_ELEMENT)
+  );
+
+  return [block, elements];
 }
 
+/*
 function main() {
   try {
     const file = resolve(__dirname, "../../src/assets/button.css");
     const code = readFileSync(file, "utf-8");
-    createModule(code);
+    console.log(JSON.stringify(createModule(code)));
   } catch (err) {
     console.log(err);
   }
 }
 
 main();
+*/
