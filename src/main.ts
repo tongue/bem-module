@@ -1,165 +1,128 @@
-import { parse, findAll, CssNode, ClassSelector } from "css-tree";
-import {
-  extractBlockName,
-  extractElementName,
-  extractModifierName,
-  extractModifierValue,
-  hasElement,
-  hasModifier,
-  hasModifierValue,
-} from "./utils/bem";
-import { notEmpty } from "./utils/typeguards";
-import { isTypeClassSelector } from "./utils/css-tree";
-import { addUniqueToArray } from "./utils/array";
+import { parse, findAll, ClassSelector, CssNode } from "css-tree";
 
 type CssSelector = string;
-type BemModifierName = string;
-type BemModifierValue = string;
-type BemElementName = string;
-type BemModifier = Record<BemModifierName, BemModifierValue[] | boolean>;
-type BemElement = [BemElementName, BemModifier];
-type Bem = [BemElement, BemElement[] | undefined];
+type EmModifierName = string;
+type EmModifierValue = string[] | boolean;
+type EmModifiers = { [key: EmModifierName]: EmModifierValue };
+type Em = { [key: CssSelector]: EmModifiers };
+type EmShape = {
+  element: string;
+  modifier?: string;
+  value?: string;
+};
 
-const EMPTY_BEM_ELEMENT: BemElement = [undefined, undefined];
+/*
+ * Groups block and element into one group named `element`
+ * Names the value of the modifier to `modifier`
+ * Names the value of the value to `value`
+ */
+const EM_REGEXP =
+  /(?<element>^[^-\s]+)?(?:--(?<modifier>[^_\-\s]+))?(?:-(?<value>[^_\-\s]+))?/;
 
 /**
- * Creates a bem modifier object with the value added from selector
- * @param selector modifier selector
- * @param existingModifierValues already existing modifier values
- * @returns BemModifier object
+ * Check if node is of type `ClassSelector`
+ * @param node css-tree CssNode
+ * @returns boolean
  */
-export const addModifier = (
-  selector: CssSelector,
-  existingModifierValues: BemModifierValue[] = []
-): BemModifier => {
-  if (hasModifierValue(selector)) {
-    return {
-      [extractModifierName(selector)]: addUniqueToArray(
-        existingModifierValues,
-        extractModifierValue(selector)
-      ),
-    };
+const isTypeClassSelector = (node: CssNode): boolean =>
+  node.type === "ClassSelector";
+
+/** Checks if value is not `null` or `undefined`
+ * @param value the value you wan't to check
+ * @returns `true` if value is not `null` or `undefined`
+ */
+const notEmpty = <Type>(value: Type | null | undefined): value is Type =>
+  value !== null && value !== undefined;
+
+/**
+ * Add unique item to an array
+ * @param arr the array you want to add a value to
+ * @param value the value you want to add
+ * @returns a new array with a possible new value
+ */
+const appendUnique = <Type = unknown>(arr: Type[], value: Type): Type[] =>
+  arr.includes(value) ? arr : [...arr, value];
+
+/**
+ * Extracts `element`, `modifier` and `value` from string
+ * @param selector CssSelector
+ * @returns an object with keys for `element`, `modifier` and `value`.
+ */
+const getEmValues = (selector: CssSelector): EmShape => {
+  const values = selector.match(EM_REGEXP)?.groups;
+
+  if (notEmpty(values) && notEmpty(values.element)) {
+    return { ...values, element: values.element };
   }
 
-  return hasModifier(selector) &&
-    notEmpty(selector) &&
-    extractModifierName(selector) !== ""
-    ? {
-        [extractModifierName(selector)]: true,
-      }
-    : {};
+  return { element: selector };
 };
 
 /**
- * Converts selectors to a BemElement object
- * @param bemElement a bem element name and modifier object
- * @param currentSelector a bem css selector
- * @returns a tuple with bem element name and modifier object
+ * Get the CssSelector from a ClassSelector
+ * @param node a ClassSelector from css-tree
+ * @returns a CssSelector
  */
-export const classNamesToBemElement = (
-  [elementName, modifiers]: BemElement,
-  currentSelector: CssSelector
-): BemElement => {
-  if (notEmpty(elementName)) {
-    const modifierName = extractModifierName(currentSelector);
-    const modifierValue = modifiers[modifierName];
-    const existingModifierValues: BemModifierValue[] = Array.isArray(
-      modifierValue
-    )
-      ? modifierValue
-      : [];
-
-    return [
-      elementName,
-      {
-        ...modifiers,
-        ...addModifier(currentSelector, existingModifierValues),
-      },
-    ];
-  }
-
-  const extractName = hasElement(currentSelector)
-    ? extractElementName
-    : extractBlockName;
-
-  // no previous values
-  return [
-    extractName(currentSelector),
-    hasModifier(currentSelector) ? addModifier(currentSelector) : {},
-  ];
-};
+const getNodeName = (node: ClassSelector): CssSelector => node.name;
 
 /**
- * Gets block and element level selectors sorted in a tuple
- * @param ast CssTree ast
- * @returns a tuple with block level selectors and element level selectors
+ * Creates a modifier value
+ * @param existing array of existing values
+ * @param value the value to add
+ * @returns an array with unique values or a boolean
  */
-export const getBlockAndElementLevelClassnames = (
-  ast: CssNode
-): [CssSelector[], CssSelector[]] =>
-  findAll(ast, isTypeClassSelector).reduce<[CssSelector[], CssSelector[]]>(
-    ([blockClasses, elementClasses], node: ClassSelector) =>
-      hasElement(node.name)
-        ? [blockClasses, addUniqueToArray(elementClasses, node.name)]
-        : [addUniqueToArray(blockClasses, node.name), elementClasses],
-    [[], []]
-  );
+const modifierValue = (
+  existing: EmModifierValue = [],
+  value?: string
+): string[] | boolean =>
+  Array.isArray(existing) && notEmpty(value)
+    ? appendUnique(existing, value)
+    : true;
 
 /**
- * Groups selectors by their BEM element
- * @param groupedElements a object with selectors sorted by element
- * @param className a bem css selector
- * @returns a object with selectors sorted by elements
+ * Creates a modifier object
+ * @param existing the current modifier object
+ * @param name the name of the modifier
+ * @param value the value of the modifier
+ * @returns a new modifier object
  */
-export const groupByElement = (
-  groupedElements: Record<BemElementName, CssSelector[]>,
-  className: CssSelector
-): Record<BemElementName, CssSelector[]> => {
-  const elementName = extractElementName(className);
-  const hasElementName = elementName in groupedElements;
+const modifier = (
+  existing: EmModifiers = {},
+  name: string,
+  value?: string
+): EmModifiers => ({
+  ...existing,
+  [name]: modifierValue(existing[name], value),
+});
+
+/**
+ * Converts a CssSelector in to an EmObject
+ * @param previous current Em object
+ * @param selector a CssSelector
+ * @returns a new Em object
+ */
+const toEm = (previous: Em, selector: CssSelector): Em => {
+  const { element, modifier: modifierName, value } = getEmValues(selector);
 
   return {
-    ...groupedElements,
-    [elementName]: hasElementName
-      ? [...groupedElements[elementName], className]
-      : [className],
+    ...previous,
+    [element]: notEmpty(modifierName)
+      ? modifier(previous[element], modifierName, value)
+      : {},
   };
 };
 
 /**
- * create the object needed to create a module
- * @param code css code
- * @returns a Bem object
+ * Creates a em object out of css
+ * @param code css code as a string
+ * @returns a Em object
  */
-export function createModule(code: string): Bem {
+export function createModule(code: string): Em {
   const ast = parse(code);
-  const [blockSelectors, elementSelectors] =
-    getBlockAndElementLevelClassnames(ast);
-  const block = blockSelectors.reduce<BemElement>(
-    classNamesToBemElement,
-    EMPTY_BEM_ELEMENT
-  );
-  const groupedElements = elementSelectors.reduce<Record<string, string[]>>(
-    groupByElement,
-    {}
-  );
-  const elements = Object.entries(groupedElements).map(([, classNames]) =>
-    classNames.reduce<BemElement>(classNamesToBemElement, EMPTY_BEM_ELEMENT)
-  );
+  const bem = findAll(ast, isTypeClassSelector)
+    .map(getNodeName)
+    .reduce<CssSelector[]>(appendUnique, [])
+    .reduce<Em>(toEm, {});
 
-  return [block, elements];
+  return bem;
 }
-
-/*
-function main() {
-  try {
-    const file = resolve(__dirname, "../../src/assets/button.css");
-    const code = readFileSync(file, "utf-8");
-    console.log(JSON.stringify(createModule(code)));
-  } catch (err) {
-    console.log(err);
-  }
-}
-
-main();
-*/

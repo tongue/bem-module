@@ -1,44 +1,79 @@
-import { addModifier, classNamesToBemElement } from "../src/main";
+import { createModule } from "../src/main";
 
-describe("addModifier()", () => {
-  test("with modifier value", () => {
-    expect(addModifier("test--state-active")).toStrictEqual({
-      state: ["active"],
-    });
-  });
-  test("with existing modifier value", () => {
-    expect(addModifier("test--state-active", ["pending"])).toStrictEqual({
-      state: ["pending", "active"],
-    });
-  });
-  test("with non-unique existing modifier value", () => {
-    expect(
-      addModifier("test--state-active", ["pending", "active"])
-    ).toStrictEqual({
-      state: ["pending", "active"],
-    });
-  });
-  test("with boolean modifier value", () => {
-    expect(addModifier("test--active")).toStrictEqual({
-      active: true,
-    });
-  });
-});
+const css = `
+.button {
+  cursor: pointer;
+}
 
-describe("classNamesToBemElement()", () => {
-  test("with existing values element name", () => {
-    expect(
-      classNamesToBemElement(["test", {}], "test--state-active")
-    ).toStrictEqual(["test", { state: ["active"] }]);
-  });
-  test("with no existing values element name", () => {
-    expect(
-      classNamesToBemElement([undefined, undefined], "test--state-active")
-    ).toStrictEqual(["test", { state: ["active"] }]);
-  });
-  test("with no modifier selector", () => {
-    expect(
-      classNamesToBemElement([undefined, undefined], "test")
-    ).toStrictEqual(["test", {}]);
+.button:hover {
+  cursor: crosshair;
+}
+
+.button--state-pending {
+  cursor: progress;
+}
+
+.button--state-error {
+  cursor: help;
+}
+
+.button--active {
+  cursor: grab;
+}
+
+.button__icon {
+  display: inline-block;
+}
+
+.button__icon--state-pending {
+  display: block;
+}
+
+.button__icon--state-error {
+  display: none;
+}
+
+.button__special {
+  color: red;
+}
+
+.button__special--active {
+  color: hotpink;
+}
+
+.button__special--state-pending {
+  color: orange;
+}
+
+.button__special--state-ok {
+  color: green;
+}
+
+.button__special--state-error {
+  color: purple;
+}
+
+.anotherBlock {
+  display: table;
+}
+
+@media (min-width: 32em) {
+  .button {
+    cursor: unset;
+  }
+  .button__icon {
+    display: inline-flex;
+  }
+}
+`;
+
+describe("createModule()", () => {
+  test("test-all", () => {
+    expect(createModule(css)).toStrictEqual({
+      button: { state: ["pending", "error"], active: true },
+      button__icon: { state: ["pending", "error"] },
+      button__special: { active: true, state: ["pending", "ok", "error"] },
+      anotherBlock: {},
+    });
   });
 });

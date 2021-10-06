@@ -1,3 +1,6 @@
+import { createModule } from "./main";
+
+const css = `
 .button {
   cursor: pointer;
 }
@@ -62,3 +65,6 @@
     display: inline-flex;
   }
 }
+`;
+
+console.log(JSON.stringify(createModule(css)));
