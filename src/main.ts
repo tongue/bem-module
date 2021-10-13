@@ -1,10 +1,11 @@
 import { parse, findAll, ClassSelector, CssNode } from "css-tree";
 
-type CssSelector = string;
-type EmModifierName = string;
-type EmModifierValue = string[] | boolean;
-type EmModifiers = { [key: EmModifierName]: EmModifierValue };
-type Em = { [key: CssSelector]: EmModifiers };
+export type CssSelector = string;
+export type EmModifierName = string;
+export type EmModifierValue = string[] | boolean;
+export type EmModifiers = { [key: EmModifierName]: EmModifierValue };
+export type Em = { [key: CssSelector]: EmModifiers };
+
 type EmShape = {
   element: string;
   modifier?: string;
@@ -24,7 +25,7 @@ const EM_REGEXP =
  * @param node css-tree CssNode
  * @returns boolean
  */
-const isTypeClassSelector = (node: CssNode): boolean =>
+const isTypeClassSelector = (node: CssNode): node is ClassSelector =>
   node.type === "ClassSelector";
 
 /** Checks if value is not `null` or `undefined`
@@ -119,7 +120,8 @@ const toEm = (previous: Em, selector: CssSelector): Em => {
  */
 export function createModule(code: string): Em {
   const ast = parse(code);
-  const bem = findAll(ast, isTypeClassSelector)
+  const bem = findAll(ast, () => true)
+    .filter(isTypeClassSelector)
     .map(getNodeName)
     .reduce<CssSelector[]>(appendUnique, [])
     .reduce<Em>(toEm, {});

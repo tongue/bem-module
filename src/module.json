@@ -1,0 +1,5 @@
+{
+  "button": "button button--state-pending button--active",
+  "buttonIcon": "button__icon button__icon--state-pending",
+  "buttonSpecial": "button__special button__special--active button__special--state-pending"
+}

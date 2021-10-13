@@ -1,0 +1,5 @@
+{
+  "button": { "state": ["pending", "error"], "active": true },
+  "button__icon": { "state": ["pending", "error"] },
+  "button__special": { "active": true, "state": ["pending", "ok", "error"] }
+}

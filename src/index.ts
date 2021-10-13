@@ -53,10 +53,6 @@ const css = `
   color: purple;
 }
 
-.shouldnotbehere {
-  display: table;
-}
-
 @media (min-width: 32em) {
   .button {
     cursor: unset;
